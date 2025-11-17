@@ -1,0 +1,60 @@
+package crawl
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+)
+
+// Default user agent fallback if API is unavailable
+const defaultUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+
+// fetchUserAgent retrieves the latest user agent from the Sansec API.
+// Returns the default user agent if the API call fails.
+func fetchUserAgent(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.sansec.io/v1/useragent/latest", nil)
+	if err != nil {
+		return defaultUserAgent
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return defaultUserAgent
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return defaultUserAgent
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return defaultUserAgent
+	}
+
+	userAgent := strings.TrimSpace(string(body))
+	if userAgent == "" {
+		return defaultUserAgent
+	}
+
+	return userAgent
+}
+
+// getUserAgent returns the user agent to use for the crawler.
+// If a user agent is provided in the config, it uses that.
+// Otherwise, it fetches the latest from the API.
+func getUserAgent(ctx context.Context, config Config) string {
+	if config.UserAgent != "" {
+		return config.UserAgent
+	}
+
+	ua := fetchUserAgent(ctx)
+	fmt.Printf("Using User-Agent: %s\n", ua)
+	return ua
+}
