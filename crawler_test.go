@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -222,7 +223,7 @@ https://google.com
 
 https://httpbin.org/status/200
 `
-	if err := os.WriteFile(tmpFile, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(tmpFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
@@ -249,11 +250,10 @@ https://httpbin.org/status/200
 	}
 }
 
-func TestResponseFileDumper(t *testing.T) {
+func TestResponseBodySaver(t *testing.T) {
 	tmpDir := t.TempDir()
-	handler := ResponseFileDumper(tmpDir)
+	handler := ResponseBodySaver(tmpDir)
 
-	// Create mock response
 	body := io.NopCloser(strings.NewReader("test content"))
 	resp := &http.Response{
 		StatusCode: 200,
@@ -267,20 +267,12 @@ func TestResponseFileDumper(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	// Check if file was created
-	files, err := os.ReadDir(tmpDir)
-	if err != nil {
-		t.Fatalf("failed to read directory: %v", err)
-	}
+	expectedFilename := "example.com"
+	expectedPath := filepath.Join(tmpDir, expectedFilename)
 
-	if len(files) != 1 {
-		t.Errorf("expected 1 file, got %d", len(files))
-	}
-
-	// Read file content
-	content, err := os.ReadFile(filepath.Join(tmpDir, files[0].Name()))
+	content, err := os.ReadFile(expectedPath)
 	if err != nil {
-		t.Fatalf("failed to read file: %v", err)
+		t.Fatalf("failed to read file %s: %v", expectedPath, err)
 	}
 
 	if string(content) != "test content" {
@@ -334,4 +326,98 @@ func TestUserAgent(t *testing.T) {
 			t.Error("expected user agent to be set")
 		}
 	})
+}
+
+func TestDefaultRedirectionPolicy(t *testing.T) {
+	policy := DefaultRedirectionPolicy(3)
+
+	t.Run("allows up to 3 redirects", func(t *testing.T) {
+		req := &http.Request{URL: &url.URL{Host: "example.com"}}
+		via := make([]*http.Request, 2)
+		err := policy(req, via)
+		if err != nil {
+			t.Errorf("expected nil error for 2 redirects, got %v", err)
+		}
+	})
+
+	t.Run("stops at 3 redirects", func(t *testing.T) {
+		req := &http.Request{URL: &url.URL{Host: "example.com"}}
+		via := make([]*http.Request, 3)
+		err := policy(req, via)
+		if err != http.ErrUseLastResponse {
+			t.Errorf("expected ErrUseLastResponse for 3 redirects, got %v", err)
+		}
+	})
+}
+
+func TestSameDomainRedirectionPolicy(t *testing.T) {
+	policy := SameDomainRedirectionPolicy()
+
+	t.Run("allows same domain redirects", func(t *testing.T) {
+		via := []*http.Request{
+			{URL: &url.URL{Host: "example.com"}},
+		}
+		req := &http.Request{URL: &url.URL{Host: "www.example.com"}}
+		err := policy(req, via)
+		if err != nil {
+			t.Errorf("expected nil error for same domain redirect, got %v", err)
+		}
+	})
+
+	t.Run("blocks cross-domain redirects", func(t *testing.T) {
+		via := []*http.Request{
+			{URL: &url.URL{Host: "example.com"}},
+		}
+		req := &http.Request{URL: &url.URL{Host: "other.com"}}
+		err := policy(req, via)
+		if err != http.ErrUseLastResponse {
+			t.Errorf("expected ErrUseLastResponse for cross-domain redirect, got %v", err)
+		}
+	})
+
+	t.Run("stops at 3 redirects even for same domain", func(t *testing.T) {
+		via := []*http.Request{
+			{URL: &url.URL{Host: "example.com"}},
+			{URL: &url.URL{Host: "www.example.com"}},
+			{URL: &url.URL{Host: "api.example.com"}},
+		}
+		req := &http.Request{URL: &url.URL{Host: "example.com"}}
+		err := policy(req, via)
+		if err != http.ErrUseLastResponse {
+			t.Errorf("expected ErrUseLastResponse for 3 redirects, got %v", err)
+		}
+	})
+}
+
+func TestSecChUaGeneration(t *testing.T) {
+	tests := []struct {
+		name      string
+		userAgent string
+		expected  string
+	}{
+		{
+			name:      "Chrome 144",
+			userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+			expected:  `"Chromium";v="144", "Google Chrome";v="144", "Not_A Brand";v="99"`,
+		},
+		{
+			name:      "Chrome 142",
+			userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.5.6789.123 Safari/537.36",
+			expected:  `"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"`,
+		},
+		{
+			name:      "No version fallback",
+			userAgent: "Some Random User Agent",
+			expected:  `"Chromium";v="144", "Google Chrome";v="144", "Not_A Brand";v="99"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := generateSecChUa(tt.userAgent)
+			if result != tt.expected {
+				t.Errorf("expected %q, got %q", tt.expected, result)
+			}
+		})
+	}
 }

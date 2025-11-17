@@ -11,6 +11,7 @@ A generic parallel web crawler for Go that provides a simple and flexible API fo
 - **Optional error handling** via callbacks
 - **Automatic User-Agent management** from Sansec API
 - **Context support** for cancellation and timeouts
+- **TLS certificate verification disabled** for testing and development (InsecureSkipVerify enabled)
 
 ## Requirements
 
@@ -78,6 +79,9 @@ type Config struct {
     // UserAgent is the User-Agent header. If empty, fetches from API.
     UserAgent string
 
+    // RedirectionPolicy controls how redirects are handled. If nil, uses DefaultRedirectionPolicy.
+    RedirectionPolicy RedirectionPolicy
+
     // Client is the HTTP client to use. If nil, uses http.DefaultClient.
     Client *http.Client
 }
@@ -102,17 +106,17 @@ https://www.google.com
 https://httpbin.org/status/200
 ```
 
-### ResponseFileDumper
+### ResponseBodySaver
 
 Save response bodies to files:
 
 ```go
 crawler := crawl.New(ctx, crawl.Config{
-    ResponseHandler: crawl.ResponseFileDumper("./output"),
+    ResponseHandler: crawl.ResponseBodySaver("./output"),
 })
 ```
 
-Files are named using a hash of the URL and saved in the specified directory.
+Files are named by hostname and saved in the specified directory (e.g., `./output/example.com`).
 
 ### ErrorLoggerStdout
 
@@ -123,6 +127,28 @@ crawler := crawl.New(ctx, crawl.Config{
     ErrorHandler: crawl.ErrorLoggerStdout(),
 })
 ```
+
+### Redirection Policies
+
+Control how HTTP redirects are handled:
+
+**DefaultRedirectionPolicy** - Allows a configurable number of redirections:
+
+```go
+crawler := crawl.New(ctx, crawl.Config{
+    RedirectionPolicy: crawl.DefaultRedirectionPolicy(3), // max 3 redirects
+})
+```
+
+**SameDomainRedirectionPolicy** - Allows up to 3 redirections, but only within the same domain:
+
+```go
+crawler := crawl.New(ctx, crawl.Config{
+    RedirectionPolicy: crawl.SameDomainRedirectionPolicy(),
+})
+```
+
+Example: `example.com` → `www.example.com` is allowed, but `example.com` → `other.com` is blocked.
 
 ## Examples
 

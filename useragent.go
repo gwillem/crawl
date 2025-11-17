@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -53,8 +54,23 @@ func getUserAgent(ctx context.Context, config Config) string {
 	if config.UserAgent != "" {
 		return config.UserAgent
 	}
+	return fetchUserAgent(ctx)
+}
 
-	ua := fetchUserAgent(ctx)
-	fmt.Printf("Using User-Agent: %s\n", ua)
-	return ua
+// extractChromeVersion extracts the Chrome version from a user agent string.
+// Example: "Chrome/144.0.0.0" -> "144"
+func extractChromeVersion(userAgent string) string {
+	re := regexp.MustCompile(`Chrome/(\d+)\.`)
+	matches := re.FindStringSubmatch(userAgent)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	return "144" // Default fallback
+}
+
+// generateSecChUa generates the Sec-Ch-Ua header from the user agent.
+// Example: Chrome/144.0.0.0 -> "Chromium";v="144", "Google Chrome";v="144", "Not_A Brand";v="99"
+func generateSecChUa(userAgent string) string {
+	version := extractChromeVersion(userAgent)
+	return fmt.Sprintf(`"Chromium";v="%s", "Google Chrome";v="%s", "Not_A Brand";v="99"`, version, version)
 }

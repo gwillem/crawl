@@ -45,7 +45,8 @@ func main() {
 
 // Example 1: Basic crawl with default handlers
 func basicCrawl() {
-	fmt.Println("=== Example 1: Basic Crawl ===\n")
+	fmt.Println("=== Example 1: Basic Crawl ===")
+	fmt.Println()
 
 	ctx := context.Background()
 
@@ -72,7 +73,7 @@ func basicCrawl() {
 
 // Example 2: Read URLs from file
 func fileURLsCrawl() {
-	fmt.Println("=== Example 2: Read URLs from File ===\n")
+	fmt.Println("=== Example 2: Read URLs from File ===")
 
 	urlsFile := "/tmp/urls.txt"
 	sampleURLs := `# Sample URLs file
@@ -82,7 +83,7 @@ https://www.google.com
 # Another URL
 https://httpbin.org/status/200
 `
-	if err := os.WriteFile(urlsFile, []byte(sampleURLs), 0644); err != nil {
+	if err := os.WriteFile(urlsFile, []byte(sampleURLs), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create sample file: %v\n", err)
 		return
 	}
@@ -103,7 +104,8 @@ https://httpbin.org/status/200
 
 // Example 3: Custom POST request builder
 func customRequestBuilder() {
-	fmt.Println("=== Example 3: Custom POST Request Builder ===\n")
+	fmt.Println("=== Example 3: Custom POST Request Builder ===")
+	fmt.Println()
 
 	ctx := context.Background()
 
@@ -152,13 +154,14 @@ func customRequestBuilder() {
 
 // Example 4: Save responses to files
 func saveResponses() {
-	fmt.Println("=== Example 4: Save Responses to Files ===\n")
+	fmt.Println("=== Example 4: Save Responses to Files ===")
+	fmt.Println()
 
 	ctx := context.Background()
 
 	crawler := crawl.New(ctx, crawl.Config{
 		WorkerCount:     2,
-		ResponseHandler: crawl.ResponseFileDumper("./crawl-output"),
+		ResponseHandler: crawl.ResponseBodySaver("./crawl-output"),
 		ErrorHandler:    crawl.ErrorLoggerStdout(),
 	})
 
@@ -183,7 +186,8 @@ func saveResponses() {
 
 // Example 5: All features combined
 func allFeaturesCombined() {
-	fmt.Println("=== Example 5: All Features Combined ===\n")
+	fmt.Println("=== Example 5: All Features Combined ===")
+	fmt.Println()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
